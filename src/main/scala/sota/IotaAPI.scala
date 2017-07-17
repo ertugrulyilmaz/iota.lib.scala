@@ -768,8 +768,83 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
 
     // Create a new bundle
     val bundle = new Bundle()
+    var tag = ""
 
-    val totalValue = 0
+    //  Iterate over all transfers, get totalValue
+    //  and prepare the signatureFragments, message and tag
+    val data = transfers.map { transfer =>
+      var signatureMessageLength = 1
+
+      // If message longer than 2187 trytes, increase signatureMessageLength (add 2nd transaction)
+      val fragments = if (transfer.message.length() > 2187) {
+        // Get total length, message / maxLength (2187 trytes)
+        signatureMessageLength += Math.floor(transfer.message.length / 2187)
+
+        messageToFragments(transfer.message, Seq.empty[String])
+      } else {
+        // Else, get single fragment with 2187 of 9's trytes
+        Seq(transfer.message.substring(0, 2187).padTo(2187, "9").mkString(""))
+      }
+
+      // get current timestamp in seconds
+      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000)
+      tag = transfer.tag.padTo(27, "9").mkString("")
+
+      // Add first entry to the bundle
+      bundle.addEntry(signatureMessageLength, transfer.address, transfer.value, tag, timestamp.toLong)
+
+      (transfer.value, fragments)
+    }.foldLeft((1L, Seq.empty[String]))((c, acc) => (c._1 + acc._1, acc._2 ++ c._2))
+
+    if (data._1 != 0) {
+      val balancesResponse = getBalances(100, Array(inputAddress))
+      val balances = balancesResponse.balances
+
+      var totalBalance = balances.map(_.toLong).sum
+      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000).toLong
+
+      // bypass the balance checks during unit testing
+      if (testMode)
+        totalBalance += 1000
+
+      if (totalBalance > 0) {
+        val toSubtract = 0L - totalBalance
+
+        // Add input as bundle entry
+        // Only a single entry, signatures will be added later
+        bundle.addEntry(securitySum, inputAddress, toSubtract, tag, timestamp)
+      }
+
+      // Return not enough balance error
+      if (data._1 > totalBalance) {
+        throw new IllegalStateException("Not enough balance")
+      }
+
+      // If there is a remainder value
+      // Add extra output to send remaining funds to
+      if (totalBalance > data._1) {
+        val remainder = totalBalance - data._1
+
+        // Remainder bundle entry if necessary
+        if (remainderAddress.isEmpty) {
+          throw new IllegalStateException("No remainder address defined")
+        }
+
+        bundle.addEntry(1, remainderAddress, remainder, tag, timestamp)
+      }
+
+      bundle.finalize(customCurl.clone())
+      bundle.addTrytes(data._2)
+
+      return bundle.transactions
+    } else {
+      throw new RuntimeException("Invalid value transfer: the transfer does not require a signature.")
+    }
+  }
+
+  def messageToFragments(message: String, fragments: Seq[String]): Seq[String] = message match {
+    case message if message.isEmpty => fragments
+    case message => messageToFragments(message.substring(2187, message.length), fragments ++ Seq(message.substring(0, 2187).padTo(2187, "9").mkString("")))
   }
 
 }
