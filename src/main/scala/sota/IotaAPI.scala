@@ -842,6 +842,90 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     }
   }
 
+  /**
+    * @param hash The hash.
+    * @return A bundle.
+    * @throws ArgumentException is thrown when an invalid argument is provided.
+    */
+  @throws[ArgumentException]
+  def findTailTransactionHash(hash: String): String = {
+    val trx: Transaction = getTrytes(hash) match {
+      case None => throw new ArgumentException("Invalid hash")
+      case Some(gtr) if gtr.trytes.isEmpty => throw new ArgumentException("Bundle transactions not visible")
+      case Some(gtr) =>Transaction(gtr.trytes(0), customCurl.clone())
+    }
+
+    if (trx.bundle.isEmpty) throw new ArgumentException("Invalid trytes, could not create object")
+
+    if (trx.currentIndex == 0) trx.hash
+    else findTailTransactionHash(trx.bundle)
+  }
+
+  /**
+    * @param seed               Tryte-encoded seed.
+    * @param security           The security level of private key / seed.
+    * @param inputs             List of inputs used for funding the transfer.
+    * @param bundle             To be populated.
+    * @param tag                The tag.
+    * @param totalValue         The total value.
+    * @param remainderAddress   If defined, this address will be used for sending the remainder value (of the inputs) to.
+    * @param signatureFragments The signature fragments.
+    * @throws NotEnoughBalanceException     is thrown when a transfer fails because their is not enough balance to perform the transfer.
+    * @throws InvalidSecurityLevelException is thrown when the specified security level is not valid.
+    * @throws InvalidAddressException       is thrown when the specified address is not an valid address.
+    */
+  @throws[NotEnoughBalanceException]
+  @throws[InvalidSecurityLevelException]
+  @throws[InvalidAddressException]
+  def addRemainder(seed: String, security: Int, inputs: List[Input], bundle: Bundle, tag: String, totalValue: Long,
+                   remainderAddress: String, signatureFragments: List[String]): List[String] = {
+    var totalTransferValue = totalValue
+
+    for (i <- inputs.indices) {
+      val thisBalance = inputs(i).balance
+      val toSubtract = 0 - thisBalance
+      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000).toLong
+
+      // Add input as bundle entry
+      bundle.addEntry(security, inputs(i).address, toSubtract, tag, timestamp)
+
+      // If there is a remainder value
+      // Add extra output to send remaining funds to
+      if (thisBalance >= totalTransferValue) {
+        val remainder = thisBalance - totalTransferValue
+
+        // If user has provided remainder address
+        // Use it to send remaining funds to
+        if (remainder > 0 && remainderAddress.nonEmpty) {
+          // Remainder bundle entry
+          bundle.addEntry(1, remainderAddress, remainder, tag, timestamp)
+
+          // Final function for signing inputs
+          return IotaAPIUtils.signInputsAndReturn(seed, inputs, bundle, signatureFragments, customCurl.clone())
+        } else if (remainder > 0) {
+          // Generate a new Address by calling getNewAddress
+          val res = getNewAddress(seed, security, 0, false, 0, false)
+
+          // Remainder bundle entry
+          bundle.addEntry(1, res.addresses(0), remainder, tag, timestamp)
+
+          // Final function for signing inputs
+          return IotaAPIUtils.signInputsAndReturn(seed, inputs, bundle, signatureFragments, customCurl.clone())
+        } else {
+          // If there is no remainder, do not add transaction to bundle
+          // simply sign and return
+          return IotaAPIUtils.signInputsAndReturn(seed, inputs, bundle, signatureFragments, customCurl.clone())
+        }
+      } else {
+        // If multiple inputs provided, subtract the totalTransferValue by
+        // the inputs balance
+        totalTransferValue -= thisBalance
+      }
+    }
+
+    throw new NotEnoughBalanceException()
+  }
+
   def messageToFragments(message: String, fragments: Seq[String]): Seq[String] = message match {
     case message if message.isEmpty => fragments
     case message => messageToFragments(message.substring(2187, message.length), fragments ++ Seq(message.substring(0, 2187).padTo(2187, "9").mkString("")))
