@@ -1,38 +1,30 @@
 package sota
 
-import sota.dto.request.{CommandRequest, IotaFindTransactionsRequest}
+import sota.IotaAPICommands._
+import sota.dto.request._
 import sota.dto.response._
 import sota.pow.SCurl
 
-import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 trait IotaAPICore {
 
   val customCurl: SCurl
   val service: IotaAPIService
 
-  def getNodeInfo(): Future[GetNodeInfoResponse] = {
-    service.getNodeInfo(CommandRequest.createNodeInfoRequest())
-  }
+  def getNodeInfo(): Future[GetNodeInfoResponse] = service.getNodeInfo(CommandRequest.createNodeInfoRequest())
 
-  def getNeighbors(): Future[GetNeighborsResponse] = ???
+  def getNeighbors(): Future[GetNeighborsResponse] = service.getNeighbors(CommandRequest.createGetNeighborsRequest())
 
-  def addNeighbors(uris: String*): AddNeighborsResponse = ???
+  def addNeighbors(uris: String*): Future[AddNeighborsResponse] = service.addNeighbors(IotaNeighborsRequest(ADD_NEIGHBORS.command, Array(uris: _*)))
 
-  def removeNeighbors(uris: String*): RemoveNeighborsResponse = ???
+  def removeNeighbors(uris: String*): Future[RemoveNeighborsResponse] = service.removeNeighbors(IotaNeighborsRequest(REMOVE_NEIGHBORS.command, Array(uris: _*)))
 
-  def getTips(): Option[GetTipsResponse] = ???
+  def getTips(): Future[GetTipsResponse] = service.getTips(CommandRequest.createGetTipsRequest())
 
-  def findTransactions(addresses: Array[String], tags: Array[String], approvees: Array[String], bundles: Array[String]): Option[FindTransactionResponse] = {
-    val findTransRequest = IotaFindTransactionsRequest()
-      .byAddresses(addresses: _*)
-      .byTags(tags: _*)
-      .byApprovees(approvees: _*)
-      .byBundles(bundles: _*)
-
-
-    Some(service.findTransactions(findTransRequest))
-  }
+  def findTransactions(addresses: Array[String], tags: Array[String], approvees: Array[String], bundles: Array[String]): Option[FindTransactionResponse] =
+    Some(service.findTransactions(IotaFindTransactionsRequest(FIND_TRANSACTIONS.command, bundles, addresses, tags, approvees)))
 
   def findTransactionsByAddresses(addresses: String*): Option[FindTransactionResponse] =
     findTransactions(Array(addresses: _*), null, null, null)
@@ -46,24 +38,29 @@ trait IotaAPICore {
   def findTransactionsByBundles(bundles: String*): Option[FindTransactionResponse] =
     findTransactions(null, null, null, Array(bundles: _*))
 
-  def getInclusionStates(transactions: Array[String], tips: Array[String]): GetInclusionStateResponse = ???
+  def getInclusionStates(transactions: Array[String], tips: Array[String]): GetInclusionStateResponse =
+    Await.result(service.getInclusionStates(IotaGetInclusionStateRequest(GET_INCLUSIONS_STATES.command, transactions, tips)), Duration.Inf)
 
-  def getTrytes(hashes: String*): Option[GetTrytesResponse] = ???
+  def getTrytes(hashes: String*): Option[GetTrytesResponse] =
+    Some(Await.result(service.getTrytes(IotaGetTrytesRequest(GET_TRYTES.command, Array(hashes: _*))), Duration.Inf))
 
-  def getTransactionsToApprove(depth: Int): GetTransactionsToApproveResponse = ???
+  def getTransactionsToApprove(depth: Int): GetTransactionsToApproveResponse =
+    Await.result(service.getTransactionsToApprove(IotaGetTransactionsToApproveRequest(GET_TRANSACTIONS_TO_APPROVE.command, depth)), Duration.Inf)
 
-  def getBalances(threshold: Int, addresses: Array[String]): GetBalancesResponse = ???
+  def getBalances(threshold: Int, addresses: Array[String]): GetBalancesResponse =
+    Await.result(service.getBalances(IotaGetBalancesRequest(GET_BALANCES.command, threshold, addresses)), Duration.Inf)
 
-  def getBalances(threshold: Int, addresses: List[String]): GetBalancesResponse = ???
+  def getBalances(threshold: Int, addresses: List[String]): GetBalancesResponse =
+    Await.result(service.getBalances(IotaGetBalancesRequest(GET_BALANCES.command, threshold, addresses.toArray)), Duration.Inf)
 
-  def interruptAttachingToTangle(): InterruptAttachingToTangleResponse = ???
+  def interruptAttachingToTangle(): Future[InterruptAttachingToTangleResponse] = service.interruptAttachingToTangle(CommandRequest.createInterruptAttachToTangleRequest())
 
-  def attachToTangle(trunkTransaction: String, branchTransaction: String, minWeightMagnitude: Int, trytes: String*): GetAttachToTangleResponse = ???
+  def attachToTangle(trunkTransaction: String, branchTransaction: String, minWeightMagnitude: Int, trytes: String*): GetAttachToTangleResponse =
+    Await.result(service.attachToTangle(IotaAttachToTangleRequest(ATTACH_TO_TANGLE.command, trunkTransaction, branchTransaction, minWeightMagnitude, Array(trytes: _*))), Duration.Inf)
 
-  def storeTransactions(trytes: String*): StoreTransactionsResponse = ???
+  def storeTransactions(trytes: String*): StoreTransactionsResponse =
+    Await.result(service.storeTransactions(IotaStoreTransactionsRequest(STORE_TRANSACTIONS.command, Array(trytes: _*))), Duration.Inf)
 
-  def broadcastTransactions(trytes: String*): BroadcastTransactionsResponse = ???
-
-
+  def broadcastTransactions(trytes: String*): Future[BroadcastTransactionsResponse] = service.broadcastTransactions(IotaBroadcastTransactionRequest(BROADCAST_TRANSACTIONS.command, Array(trytes: _*)))
 
 }

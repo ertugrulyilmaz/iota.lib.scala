@@ -2,8 +2,6 @@ package sota
 
 import java.util.Calendar
 
-import com.typesafe.scalalogging.StrictLogging
-import org.apache.commons.lang3.StringUtils
 import sota.dto.response._
 import sota.error.{ArgumentException, InvalidTrytesException, _}
 import sota.model._
@@ -13,9 +11,8 @@ import sota.utils._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.util.{Failure, Success}
 
-trait IotaAPI extends IotaAPICore with StrictLogging {
+trait IotaAPI extends IotaAPICore {
 
   /**
     * Generates a new address from a seed and returns the remainderAddress.
@@ -104,10 +101,11 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       throw new InvalidSecurityLevelException()
     }
 
-    val _start = if (start != null) 0 else start
+    val _start = start
+//    val _start = if (start != null) 0 else start
 
     if (_start > end || end > (_start + 500)) {
-      throw new ArgumentException()
+      throw new ArgumentException("")
     }
 
     val gnr = getNewAddress(seed, security, start, false, end, true)
@@ -173,14 +171,13 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
   @throws[BroadcastAndStoreException]
   def broadcastAndStore(trytes: Array[String]): StoreTransactionsResponse = {
     try {
-      broadcastTransactions(trytes)
+      broadcastTransactions(trytes:_*)
     } catch {
       case e: Exception =>
-        logger.error("Impossible to broadcastAndStore, aborting.", e);
         throw new BroadcastAndStoreException()
     }
 
-    storeTransactions(trytes)
+    storeTransactions(trytes:_*)
   }
 
   /**
@@ -198,7 +195,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     val res: GetAttachToTangleResponse = attachToTangle(txs.trunkTransaction, txs.branchTransaction, minWeightMagnitude, trytes: _*)
 
     try {
-      broadcastAndStore(res.trytes)
+      broadcastAndStore(res.trytes.toArray)
 
       res.trytes.map(Transaction(_, customCurl.clone()))
     } catch {
@@ -218,7 +215,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       throw new IllegalStateException("Not an Array of Hashes: " + hashes)
     }
 
-    getTrytes(hashes: _*).trytes.map(Transaction(_, customCurl.clone()))
+    getTrytes(hashes: _*).get.trytes.map(Transaction(_, customCurl.clone()))
   }
 
   /**
@@ -286,7 +283,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       throw new InvalidSecurityLevelException()
     }
 
-    val bundle = new Bundle()
+    val bundle = Bundle()
     val signatureFragments = ArrayBuffer.empty[String]
     var totalValue = 0L
     var tag = ""
@@ -302,33 +299,33 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       // If message longer than 2187 trytes, increase signatureMessageLength (add 2nd transaction)
       if (transfer.message.length > 2187) {
         // Get total length, message / maxLength (2187 trytes)
-        signatureMessageLength += Math.floor(transfer.message.length() / 2187)
+        signatureMessageLength += Math.floor((transfer.message.length / 2187).toDouble).toInt
 
         var msgCopy = transfer.message
 
         while (!msgCopy.isEmpty) {
-          var fragment = StringUtils.substring(msgCopy, 0, 2187)
-          msgCopy = StringUtils.substring(msgCopy, 2187, msgCopy.length)
+          var fragment = msgCopy.substring(0, 2187)
+          msgCopy = msgCopy.substring(2187, msgCopy.length)
 
           // Pad remainder of fragment
-          fragment = StringUtils.rightPad(fragment, 2187, '9')
+          fragment = fragment.padTo(2187, '9').mkString("")
           signatureFragments += fragment
         }
       } else {
         // Else, get single fragment with 2187 of 9's trytes
-        var fragment = StringUtils.substring(transfer.message, 0, 2187)
-        fragment = StringUtils.rightPad(fragment, 2187, '9')
+        var fragment = transfer.message.substring(0, 2187)
+        fragment = fragment.padTo(2187, '9')
         signatureFragments += fragment
       }
 
       // get current timestamp in seconds
-      val timestamp: Long = Math.floor(Calendar.getInstance().getTimeInMillis / 1000).toLong
+      val timestamp: Long = Math.floor((Calendar.getInstance().getTimeInMillis / 1000).toDouble).toLong
 
       // If no tag defined, get 27 tryte tag.
       tag = if (transfer.tag.isEmpty) "999999999999999999999999999" else transfer.tag
 
       // Pad for required 27 tryte length
-      tag = StringUtils.rightPad(tag, 27, '9')
+      tag = tag.padTo(27, '9')
 
       // Add first entry to the bundle
       bundle.addEntry(signatureMessageLength, transfer.address, transfer.value, tag, timestamp)
@@ -353,7 +350,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
           // if we've already reached the intended input value, break out of loop
           if (totalBalance < totalValue) {
             totalBalance += balance.toInt
-            val inputEl = inputs(i).copy(balance = balance.toInt)
+            val inputEl = inputs(i).copy(balance = balance.toLong)
             confirmedInputs += inputEl
           }
 
@@ -365,14 +362,15 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
           throw new IllegalStateException("Not enough balance")
         }
 
-        addRemainder(seed, security, confirmedInputs, bundle, tag, totalValue, null, signatureFragments)
+        addRemainder(seed, security, confirmedInputs.toList, bundle, tag, totalValue, null, signatureFragments.toList)
       } else {
         //  Case 2: Get inputs deterministically
         //
         //  If no inputs provided, derive the addresses from the seed and
         //  confirm that the inputs exceed the threshold
+        val newinputs = getInputs(seed, security, 0, 0, totalValue)
 
-        addRemainder(seed, security, newinputs.getInput(), bundle, tag, totalValue, null, signatureFragments)
+        addRemainder(seed, security, newinputs.inputs.toList, bundle, tag, totalValue, null, signatureFragments.toList)
       }
     } else {
       // If no input required, don't sign and simply finalize the bundle
@@ -510,18 +508,18 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
   @throws[InvalidSignatureException]
   def getBundle(transaction: String): GetBundleResponse = {
     val stopWatch = StopWatch()
-    val bundle: Bundle = traverseBundle(transaction, null, new Bundle())
+    val bundle: Bundle = traverseBundle(transaction, null, Bundle())
 
     if (bundle == null) {
       throw new ArgumentException("Unknown Bundle")
     }
 
     var totalSum = 0L
-    val bundleHash = bundle.transactions(0).bundle
+    val bundleHash = bundle.transactions.head.bundle
     val curl = SCurl()
     curl.reset()
 
-    var signaturesToValidate = ArrayBuffer.empty[Signature]
+    val signaturesToValidate = ArrayBuffer.empty[Signature]
     val signature = Signature()
 
     for (i <- bundle.transactions.indices) {
@@ -550,7 +548,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
           // Check if new tx is part of the signature fragment
           if (newBundleTx.address == trx.address && newBundleTx.value == 0) {
             if (sig.signatureFragments.indexOf(newBundleTx.signatureFragments) == -1) {
-              sig.signatureFragments += newBundleTx.signatureFragments
+              sig.signatureFragments ++= List(newBundleTx.signatureFragments)
             }
           }
         }
@@ -571,9 +569,9 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     if (bundleFromTxString != bundleHash) throw new InvalidBundleException("Invalid Bundle Hash")
 
     // Last tx in the bundle should have currentIndex === lastIndex
-    bundle.length = bundle.transactions.length
+    val bundleTransactionsLength = bundle.transactions.length
 
-    if (bundle.transactions(bundle.length - 1).currentIndex != (bundle.transactions(bundle.length - 1).lastIndex)) {
+    if (bundle.transactions(bundleTransactionsLength - 1).currentIndex != (bundle.transactions(bundleTransactionsLength - 1).lastIndex)) {
       throw new InvalidBundleException("Invalid Bundle")
     }
 
@@ -608,7 +606,8 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     val stopWatch = StopWatch()
     val bundleTrytes = ArrayBuffer.empty[String]
     val bundleResponse = getBundle(transaction)
-    val bundle = new Bundle(bundleResponse.transactions, bundleResponse.transactions.length)
+    val bundle = Bundle()
+    bundle.transactions = bundleResponse.transactions
     bundle.transactions.foreach { trx =>
       bundleTrytes ++= Seq(trx.toTrytes())
     }
@@ -698,7 +697,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     getTrytes(trunkTx) match {
       case Some(gtr) if gtr.trytes.isEmpty => throw new ArgumentException("Bundle transactions not visible")
       case Some(gtr) =>
-        val trx = Transaction(gtr.trytes(0), customCurl.clone())
+        val trx = Transaction(gtr.trytes.head, customCurl.clone())
 
         if (trx.bundle.isEmpty) {
           throw new ArgumentException("Invalid trytes, could not create object")
@@ -710,18 +709,21 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
         }
 
         // If different bundle hash, return with bundle
-        if (bundleHash != Some(trx.bundle)) {
+        if (!bundleHash.contains(trx.bundle)) {
           return bundle
         }
 
         // If only one bundle element, return
         if (trx.lastIndex == 0 && trx.currentIndex == 0) {
-          return new Bundle(List(trx), 1)
+          val bundle = Bundle()
+          bundle.transactions = List(trx)
+
+          return bundle
         }
 
-        val trxs = bundle.transactions ++ List(trx)
+        bundle.transactions ++= List(trx)
 
-        traverseBundle(trunkTx, bundleHash, bundle)
+        traverseBundle(trx.trunkTransaction, bundleHash, bundle)
       case None => throw new ArgumentException("Get Trytes Response was null")
     }
   }
@@ -740,15 +742,13 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
   @throws[InvalidBundleException]
   @throws[InvalidAddressException]
   def initiateTransfer(securitySum: Int, inputAddress: String, remainderAddress: String, transfers: Seq[Transfer], testMode: Boolean): Seq[Transaction] = {
-    val sw = new StopWatch()
-
     // If message or tag is not supplied, provide it
     // Also remove the checksum of the address if it's there
     val _transfers = transfers.map { transfer =>
-      val message = if (transfer.message.isEmpty) transfer.message.padTo(2187, "9").mkString("")
+      val message = if (transfer.message.isEmpty) transfer.message.padTo(2187, '9').mkString("")
       else transfer.message
 
-      val tag = if (transfer.tag.isEmpty) transfer.tag.padTo(2187, "9").mkString("")
+      val tag = if (transfer.tag.isEmpty) transfer.tag.padTo(2187, '9').mkString("")
       else transfer.tag
 
       val address = if (Checksum.isValidChecksum(transfer.address)) Checksum.removeChecksum(transfer.address)
@@ -767,7 +767,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     if (!InputValidator.isAddress(remainderAddress)) throw new InvalidBundleException()
 
     // Create a new bundle
-    val bundle = new Bundle()
+    val bundle = Bundle()
     var tag = ""
 
     //  Iterate over all transfers, get totalValue
@@ -778,20 +778,20 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       // If message longer than 2187 trytes, increase signatureMessageLength (add 2nd transaction)
       val fragments = if (transfer.message.length() > 2187) {
         // Get total length, message / maxLength (2187 trytes)
-        signatureMessageLength += Math.floor(transfer.message.length / 2187)
+        signatureMessageLength += Math.floor((transfer.message.length / 2187).toDouble).toInt
 
         messageToFragments(transfer.message, Seq.empty[String])
       } else {
         // Else, get single fragment with 2187 of 9's trytes
-        Seq(transfer.message.substring(0, 2187).padTo(2187, "9").mkString(""))
+        Seq(transfer.message.substring(0, 2187).padTo(2187, '9').mkString(""))
       }
 
       // get current timestamp in seconds
-      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000)
+      val timestamp = Math.floor((Calendar.getInstance().getTimeInMillis / 1000).toDouble).toLong
       tag = transfer.tag.padTo(27, "9").mkString("")
 
       // Add first entry to the bundle
-      bundle.addEntry(signatureMessageLength, transfer.address, transfer.value, tag, timestamp.toLong)
+      bundle.addEntry(signatureMessageLength, transfer.address, transfer.value, tag, timestamp)
 
       (transfer.value, fragments)
     }.foldLeft((1L, Seq.empty[String]))((c, acc) => (c._1 + acc._1, acc._2 ++ c._2))
@@ -801,7 +801,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
       val balances = balancesResponse.balances
 
       var totalBalance = balances.map(_.toLong).sum
-      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000).toLong
+      val timestamp = Math.floor((Calendar.getInstance().getTimeInMillis / 1000).toDouble).toLong
 
       // bypass the balance checks during unit testing
       if (testMode)
@@ -852,7 +852,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     val trx: Transaction = getTrytes(hash) match {
       case None => throw new ArgumentException("Invalid hash")
       case Some(gtr) if gtr.trytes.isEmpty => throw new ArgumentException("Bundle transactions not visible")
-      case Some(gtr) =>Transaction(gtr.trytes(0), customCurl.clone())
+      case Some(gtr) =>Transaction(gtr.trytes.head, customCurl.clone())
     }
 
     if (trx.bundle.isEmpty) throw new ArgumentException("Invalid trytes, could not create object")
@@ -884,7 +884,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
     for (i <- inputs.indices) {
       val thisBalance = inputs(i).balance
       val toSubtract = 0 - thisBalance
-      val timestamp = Math.floor(Calendar.getInstance().getTimeInMillis / 1000).toLong
+      val timestamp = Math.floor((Calendar.getInstance().getTimeInMillis / 1000).toDouble).toLong
 
       // Add input as bundle entry
       bundle.addEntry(security, inputs(i).address, toSubtract, tag, timestamp)
@@ -928,7 +928,7 @@ trait IotaAPI extends IotaAPICore with StrictLogging {
 
   def messageToFragments(message: String, fragments: Seq[String]): Seq[String] = message match {
     case message if message.isEmpty => fragments
-    case message => messageToFragments(message.substring(2187, message.length), fragments ++ Seq(message.substring(0, 2187).padTo(2187, "9").mkString("")))
+    case message => messageToFragments(message.substring(2187, message.length), fragments ++ Seq(message.substring(0, 2187).padTo(2187, '9').mkString("")))
   }
 
 }

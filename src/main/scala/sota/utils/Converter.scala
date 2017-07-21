@@ -1,7 +1,5 @@
 package sota.utils
 
-import java.util.Arrays
-
 object Converter {
 
   private val RADIX: Int = 3
@@ -10,18 +8,18 @@ object Converter {
   private val NUMBER_OF_TRITS_IN_A_BYTE: Int = 5
   private val NUMBER_OF_TRITS_IN_A_TRYTE: Int = 3
 
-  private val BYTE_TO_TRITS_MAPPINGS = new Array[Array[Int]](243)
-  private val TRYTE_TO_TRITS_MAPPINGS = new Array[Array[Int]](27)
+  private val BYTE_TO_TRITS_MAPPINGS = Array.ofDim[Int](243, 5)
+  private val TRYTE_TO_TRITS_MAPPINGS = Array.ofDim[Int](27, 5)
 
-  val trits: Array[Int] = new Array[Int](NUMBER_OF_TRITS_IN_A_BYTE)
+  private val trits: Array[Int] = Array.ofDim(NUMBER_OF_TRITS_IN_A_BYTE)
 
   for (i <- 0 until 243) {
-    BYTE_TO_TRITS_MAPPINGS(i) = Arrays.copyOf(trits, NUMBER_OF_TRITS_IN_A_BYTE)
+    BYTE_TO_TRITS_MAPPINGS(i) = trits.clone()
     increment(trits, NUMBER_OF_TRITS_IN_A_BYTE)
   }
 
   for (i <- 0 until 27) {
-    TRYTE_TO_TRITS_MAPPINGS(i) = Arrays.copyOf(trits, NUMBER_OF_TRITS_IN_A_TRYTE)
+    TRYTE_TO_TRITS_MAPPINGS(i) = trits.clone()
     increment(trits, NUMBER_OF_TRITS_IN_A_TRYTE)
   }
 
@@ -34,8 +32,8 @@ object Converter {
       else NUMBER_OF_TRITS_IN_A_BYTE
 
       while (j > 0) {
-        value = value * RADIX + trits(offset + i * NUMBER_OF_TRITS_IN_A_BYTE + j)
         j -= 1
+        value = value * RADIX + trits(offset + i * NUMBER_OF_TRITS_IN_A_BYTE + j)
       }
 
       bytes(i) = value.asInstanceOf[Byte]
@@ -53,17 +51,17 @@ object Converter {
 
     var i = 0
     while (i < bytes.length && offset < trits.length) {
-      val index = if (bytes(i) < 0) bytes(i) + BYTE_TO_TRITS_MAPPINGS.length else bytes(i)
-      val minus = if (offset < NUMBER_OF_TRITS_IN_A_BYTE) trits.length - offset else NUMBER_OF_TRITS_IN_A_BYTE
+      val index = if (bytes(i).toInt < 0) bytes(i).toInt + BYTE_TO_TRITS_MAPPINGS.length else bytes(i).toInt
+      val length = if (trits.length - offset < NUMBER_OF_TRITS_IN_A_BYTE) trits.length - offset else NUMBER_OF_TRITS_IN_A_BYTE
 
-      Array.copy(BYTE_TO_TRITS_MAPPINGS(index), 0, trits, offset, trits.length - minus)
+      Array.copy(BYTE_TO_TRITS_MAPPINGS(index), 0, trits, offset, length)
       offset += NUMBER_OF_TRITS_IN_A_BYTE
       i += 1
     }
 
     while (offset < trits.length) {
-      offset += 1
       trits(offset) = 0
+      offset += 1
     }
   }
 
@@ -180,6 +178,7 @@ object Converter {
 
     destination
   }
+
   /**
     * Converts trites to trytes.
     *
@@ -224,7 +223,7 @@ object Converter {
   def value(trits: Array[Int]): Int = {
     var value = 0
 
-    trits.foreach { trit =>
+    trits.reverse.foreach { trit =>
       value = value * 3 + trit
     }
 
@@ -232,20 +231,12 @@ object Converter {
   }
 
   /**
-    * Converts the specified trits to its corresponding integer value.
+    * Converts the specified trits to its corresponding long value.
     *
     * @param trits The trits.
     * @return The value.
     */
-  def longValue(trits: Array[Int]): Long = {
-    var value: Long = 0L
-
-    for (i <- trits.length until 0 by -1) {
-      value = value * 3 + trits(i)
-    }
-
-    value
-  }
+  def longValue(trits: Array[Int]): Long = value(trits).toLong
 
   /**
     * Increments the specified trits.
@@ -255,9 +246,12 @@ object Converter {
     */
   def increment(trits: Array[Int], size: Int): Unit = {
     for (i <- 0 until size) {
+      trits(i) += 1
+
       if (trits(i) > Converter.MAX_TRIT_VALUE) {
-        trits(i) = trits(i) + 1
         trits(i) = Converter.MIN_TRIT_VALUE
+      } else {
+        return
       }
     }
   }

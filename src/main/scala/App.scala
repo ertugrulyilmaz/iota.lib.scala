@@ -1,16 +1,18 @@
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import com.typesafe.scalalogging.StrictLogging
-import sota.IotaAPI
+import sota.utils.Converter
 import sota.protocol.ResponseSerialization
 
 object App extends App with StrictLogging with ResponseSerialization {
 
-  implicit val system = ActorSystem()
-  implicit val materializer = ActorMaterializer()
-  implicit val dispatcher = system.dispatcher
+  val temp = Array(1, 0, 0, 1, 1, -1, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 1, 1, -1, -1, 0, 0, 0, 0, 0, -1, 0, 1, 0, 1, -1, 0, 1, 1, 1, 0, 0, -1, -1, -1, 1, 0, 1, -1, 0, 0, 1, 0, -1, 0, 0, -1, 0, 1, 1, -1, 1, -1, -1, -1, 0, -1, 0, 0, 1, 1, -1, -1, -1, 0, 1, 1, 1, -1, 0, 1, 0, -1, -1, -1, 1, -1, -1, -1, 0, -1, 0, 0, 0, -1, 0, 1, -1, 0, 0, -1, -1, 0, 1, -1, 0, -1, 1, 1, 0, -1, 1, -1, -1, 0, 1, -1, 0, -1, -1, 0, -1, 0, 0, 0, 0, -1, -1, -1, 1, 0, 0, 0, 1, 0, 1, -1, 0, -1, -1, 1, 1, 1, -1, 1, 0, 0, 0, 0, 0, -1, -1, -1, 1, 1, -1, -1, -1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, -1, -1, -1, 1, 0, 1, 0, 1, -1, -1, 1, 0, -1, -1, 0, -1, 0, -1, -1, 0, 0, 0, 1, 0, 1, -1, 1, -1, 0, 0, 0, 0, -1, 0, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, -1, -1, 0, 1, -1, 0, 1, -1, 1, 1, 1, -1, 1, 0, 0)
 
-  val api: IotaAPI = IotaAPI()
-  val r = api.getNodeInfo().foreach(println)
+  val bytes = Converter.bytes(temp)
+  var trits = Array.ofDim[Int](bytes.length)
+
+  logger.info("{}", trits)
+
+  Converter.getTrits(bytes, trits)
+
+  logger.info("{}", trits)
 
 }

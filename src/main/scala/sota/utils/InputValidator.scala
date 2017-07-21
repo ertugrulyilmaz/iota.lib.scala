@@ -1,13 +1,9 @@
 package sota.utils
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.math.NumberUtils
 import sota.error.InvalidAddressException
 import sota.model.Transfer
 
-/**
-  * Created by ertugrul on 6/25/17.
-  */
 object InputValidator {
 
   /**
@@ -33,7 +29,6 @@ object InputValidator {
     if (!isAddress(address)) {
       throw new InvalidAddressException()
     }
-
     true
   }
 
@@ -124,7 +119,7 @@ object InputValidator {
     * @param transfer The transfer to validate.
     * @return <code>true</code> if the specified transfer is valid; otherwise, <code>false</code>>.
     **/
-  def isValidTransfer(transfer: Transfer): Boolean = {
+  def isValidTransfer(transfer: Transfer): Boolean = transfer match {
     case _ if !isAddress(transfer.address) => false
     case _ if !isTrytes(transfer.message, 0) => false
     case _ => isTrytes(transfer.tag, 27)
@@ -142,7 +137,7 @@ object InputValidator {
 
     if (!isTrytes(seed, seed.length)) throw new IllegalStateException("Invalid Seed: Format not in trytes")
 
-    StringUtils.rightPad(seed, 81, '9')
+    seed.padTo(81, '9')
   }
 
 }

@@ -1,23 +1,20 @@
 package sota.model
 
-import util.control.Breaks._
 import sota.pow.SCurl
 import sota.utils.Converter
 
-import scala.collection.mutable.ArrayBuffer
+import scala.util.control.Breaks._
 
-class Bundle(val transactions: List[Transaction], var length: Int) extends Comparable[Bundle] {
+case class Bundle() extends Comparable[Bundle] {
+
+  var transactions: List[Transaction] = List.empty[Transaction]
 
   val EMPTY_HASH: String = "999999999999999999999999999999999999999999999999999999999999999999999999999999999"
-
-  def this() = {
-    this(ArrayBuffer.empty, 0)
-  }
 
   def addEntry(signatureMessageLength: Int, address: String, value: Long, tag: String, timestamp: Long): Unit = {
     for (i <- 0 until signatureMessageLength) {
       val v = if (i == 0) value else 0
-      transactions += Transaction(address, v, tag, timestamp)
+      transactions ++= List(Transaction(address, v, tag, timestamp))
     }
   }
 
@@ -108,8 +105,8 @@ class Bundle(val transactions: List[Transaction], var length: Int) extends Compa
   }
 
   override def compareTo(o: Bundle): Int = {
-    if (transactions(0).timestamp < o.transactions(0).timestamp) -1
-    else if (transactions(0).timestamp == o.transactions(0).timestamp) 0
+    if (transactions.head.timestamp < o.transactions.head.timestamp) -1
+    else if (transactions.head.timestamp == o.transactions.head.timestamp) 0
     else 1
   }
 

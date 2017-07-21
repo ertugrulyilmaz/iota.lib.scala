@@ -1,6 +1,6 @@
 package sota.utils
 
-import sota.model.{Bundle, Transaction}
+import sota.model.Bundle
 import sota.pow.SCurl
 
 import scala.collection.mutable.ArrayBuffer
@@ -83,6 +83,35 @@ trait Signing {
     address
   }
 
+  def digests(key: Array[Int]): Array[Int] = {
+    val digests = Array.ofDim[Int](Math.floor((key.length / 6561).toDouble).toInt * 243)
+    var buffer = Array.ofDim[Int](243)
+
+    for (i <- 0 until Math.floor((key.length / 6561).toDouble).toInt) {
+      val keyFragment = IotaAPIUtils.copyOfRange(key, i * 6561, (i + 1) * 6561)
+
+      for (j <- 0 until 27) {
+        buffer = IotaAPIUtils.copyOfRange(keyFragment, j * 243, (j + 1) * 243)
+
+        for (_ <- 0 until 26) {
+          curl.reset()
+            .absorb(buffer)
+            .squeeze(buffer)
+        }
+
+        Array.copy(buffer, 0, keyFragment, j * 243, 243)
+      }
+
+      curl.reset()
+      curl.absorb(keyFragment, 0, keyFragment.length)
+      curl.squeeze(buffer, 0, buffer.length)
+
+      Array.copy(buffer, 0, digests, i * 243, 243)
+    }
+
+    digests
+  }
+
   def digests(normalizedBundleFragment: Array[Int], signatureFragment: Array[Int]): Array[Int] = {
     curl.reset()
 
@@ -122,7 +151,7 @@ trait Signing {
   }
 
   def validateSignatures(expectedAddress: String, signatureFragments: Array[String], bundleHash: String): Boolean = {
-    val bundle = new Bundle()
+    val bundle = Bundle()
     val normalizedBundleFragments = Array.ofDim[Int](3, 27)
     val normalizedBundleHash = bundle.normalizedBundle(bundleHash)
 
@@ -139,8 +168,8 @@ trait Signing {
       }
     }
 
-    val address = Converter.trytes(address(_digests))
-    expectedAddress == address
+    val _address = Converter.trytes(address(_digests))
+    expectedAddress == _address
   }
 
 }

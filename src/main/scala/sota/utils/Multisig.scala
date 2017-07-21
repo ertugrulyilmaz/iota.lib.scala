@@ -3,7 +3,6 @@ package sota.utils
 import sota.model.Bundle
 import sota.pow.SCurl
 
-import scala.reflect.ClassTag
 import scala.util.control.Breaks._
 
 /**

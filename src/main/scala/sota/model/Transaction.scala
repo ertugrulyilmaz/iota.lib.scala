@@ -112,7 +112,7 @@ object Transaction {
     override var nonce: String = ""
     override def persistence: Boolean = false
   }
-  
+
   def apply(_address: String, _value: Long, _tag: String, _timestamp: Long) = new Transaction {
     override val customCurl = SCurl()
     override def hash: String = ""
