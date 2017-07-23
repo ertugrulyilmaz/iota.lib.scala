@@ -3,11 +3,6 @@ package sota.utils
 import sota.model.Bundle
 import sota.pow.SCurl
 
-import scala.util.control.Breaks._
-
-/**
-  * Created by ertugrul on 6/26/17.
-  */
 trait Multisig {
 
   val curl: SCurl
@@ -48,7 +43,7 @@ trait Multisig {
   /**
     * Gets the key value of a seed
     *
-    * @param seed  tryte-encoded seed. It should be noted that this seed is not transferred
+    * @param seed tryte-encoded seed. It should be noted that this seed is not transferred
     * @param index
     * @return digest trytes
     **/
@@ -111,47 +106,45 @@ trait Multisig {
     // where to add the signature
     var numSignedTxs = 0
 
-    breakable {
-      for (i <- bundleToSign.transactions.indices) {
-        if (bundleToSign.transactions(i).address.equals(inputAddress)) {
-          if (!InputValidator.isNinesTrytes(bundleToSign.transactions(i).signatureFragments, bundleToSign.transactions(i).signatureFragments.length)) {
-            numSignedTxs += 1
-          } else {
-            val bundleHash = bundleToSign.transactions(i).bundle
+    for (i <- bundleToSign.transactions.indices) {
+      if (bundleToSign.transactions(i).address.equals(inputAddress)) {
+        if (!InputValidator.isNinesTrytes(bundleToSign.transactions(i).signatureFragments, bundleToSign.transactions(i).signatureFragments.length)) {
+          numSignedTxs += 1
+        } else {
+          val bundleHash = bundleToSign.transactions(i).bundle
 
-            //  First 6561 trits for the firstFragment
-            val firstFragment: Array[Int] = IotaAPIUtils.copyOfRange(key, 0, 6561)
+          //  First 6561 trits for the firstFragment
+          val firstFragment: Array[Int] = IotaAPIUtils.copyOfRange(key, 0, 6561)
 
-            val normalizedBundleFragments: Array[Array[Int]] = Array.ofDim[Int](3, 27)
-            val normalizedBundleHash: Array[Int] = bundleToSign.normalizedBundle(bundleHash)
+          val normalizedBundleFragments: Array[Array[Int]] = Array.ofDim[Int](3, 27)
+          val normalizedBundleHash: Array[Int] = bundleToSign.normalizedBundle(bundleHash)
 
-            for (k <- 0 until 3) {
-              normalizedBundleFragments(k) = IotaAPIUtils.copyOfRange(normalizedBundleHash, k * 27, (k + 1) * 27)
-            }
-
-            val firstBundleFragment = normalizedBundleFragments(numSignedTxs % 3)
-
-            val firstSignedFragment = signingInstance.signatureFragment(firstBundleFragment, firstFragment)
-
-            bundleToSign.transactions(i).signatureFragments = Converter.trytes(firstSignedFragment)
-
-            for (j <- 1 until security) {
-              //  Next 6561 trits for the firstFragment
-              val nextFragment = IotaAPIUtils.copyOfRange(key, 6561 * j, (j + 1) * 6561)
-
-              //  Use the next 27 trytes
-              val nextBundleFragment = normalizedBundleFragments((numSignedTxs + j) % 3)
-
-              //  Calculate the new signatureFragment with the first bundle fragment
-              val nextSignedFragment = signingInstance.signatureFragment(nextBundleFragment, nextFragment)
-
-              //  Convert signature to trytes and add new bundle entry at i + j position
-              // Assign the signature fragment
-              bundleToSign.transactions(i + j).signatureFragments = Converter.trytes(nextSignedFragment)
-            }
-
-            break
+          for (k <- 0 until 3) {
+            normalizedBundleFragments(k) = IotaAPIUtils.copyOfRange(normalizedBundleHash, k * 27, (k + 1) * 27)
           }
+
+          val firstBundleFragment = normalizedBundleFragments(numSignedTxs % 3)
+
+          val firstSignedFragment = signingInstance.signatureFragment(firstBundleFragment, firstFragment)
+
+          bundleToSign.transactions(i).signatureFragments = Converter.trytes(firstSignedFragment)
+
+          for (j <- 1 until security) {
+            //  Next 6561 trits for the firstFragment
+            val nextFragment = IotaAPIUtils.copyOfRange(key, 6561 * j, (j + 1) * 6561)
+
+            //  Use the next 27 trytes
+            val nextBundleFragment = normalizedBundleFragments((numSignedTxs + j) % 3)
+
+            //  Calculate the new signatureFragment with the first bundle fragment
+            val nextSignedFragment = signingInstance.signatureFragment(nextBundleFragment, nextFragment)
+
+            //  Convert signature to trytes and add new bundle entry at i + j position
+            // Assign the signature fragment
+            bundleToSign.transactions(i + j).signatureFragments = Converter.trytes(nextSignedFragment)
+          }
+
+          return bundleToSign
         }
       }
     }
