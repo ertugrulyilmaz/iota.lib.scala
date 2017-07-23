@@ -1,7 +1,5 @@
 package sota.pow
 
-import java.util.Arrays
-
 trait SCurl {
 
   lazy val HASH_LENGTH: Int = 243
@@ -16,7 +14,7 @@ trait SCurl {
 
     do {
       val copyLength = if (length < HASH_LENGTH) length else HASH_LENGTH
-      Array.copy(trits, offset, state, 0, copyLength)
+      Array.copy(trits, o, state, 0, copyLength)
 
       transform()
 
@@ -37,8 +35,8 @@ trait SCurl {
 
     do {
       val copyLength = if (length < HASH_LENGTH) length else HASH_LENGTH
-      Array.copy(trits, offset, state, 0, copyLength)
 
+      Array.copy(state, 0, trits, offset, copyLength)
       transform()
 
       o += HASH_LENGTH
@@ -73,7 +71,9 @@ trait SCurl {
   }
 
   def reset(): SCurl = {
-    Arrays.fill(state, 0)
+    for (i <- 0 until STATE_LENGTH) {
+      state(i) = 0
+    }
 
     this
   }

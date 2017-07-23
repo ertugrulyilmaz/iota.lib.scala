@@ -15,8 +15,8 @@ trait Signing {
 
     while (i < index && continue) {
       for (j <- 0 until 243) {
+        seed(j) += 1
         if (seed(j) > 1) {
-          seed(j) = seed(j) + 1
           seed(j) = -1
         } else {
           continue = false
@@ -103,8 +103,8 @@ trait Signing {
       }
 
       curl.reset()
-      curl.absorb(keyFragment, 0, keyFragment.length)
-      curl.squeeze(buffer, 0, buffer.length)
+      curl.absorb(keyFragment)
+      curl.squeeze(buffer)
 
       Array.copy(buffer, 0, digests, i * 243, 243)
     }

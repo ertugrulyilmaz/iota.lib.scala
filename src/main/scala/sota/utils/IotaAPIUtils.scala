@@ -91,7 +91,7 @@ object IotaAPIUtils {
     val newLength: Int = to - from
     val copy: Array[T] = Array.ofDim[T](newLength)
 
-    Array.copy(original, from, copy, Math.min(original.size, from), newLength)
+    Array.copy(original, from, copy, 0, Math.min(original.size - from, newLength))
 
     copy
   }
